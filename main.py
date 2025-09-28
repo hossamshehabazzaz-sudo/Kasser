@@ -104,7 +104,8 @@ def reset_user_session(user_id):
         'proxies_list': [],
         'flex_amount': None,
         'running': False,
-        'current_token': None  # لتخزين التوكن الحالي
+        'current_token': None,  # لتخزين التوكن الحالي
+        'last_quota': None  # لتخزين النسخة السابقة عشان نتجنى التكرار
     }
     RUNNING_CYCLES[user_id] = False
 
@@ -525,12 +526,19 @@ def run_flex_cycle(message):
         end_time = datetime.now()
         bot.send_message(message.chat.id, f"✅ اكتمل الانتظار (انتهى الساعة: {end_time.strftime('%H:%M:%S')}, المدة: {(end_time - start_time).total_seconds():.2f} ثانية)")
 
-        # 3- قبول الدعوة + تغيير الحصة إلى 20% متزامن
+        # 3- قبول الدعوة + تغيير الحصة بتناوب عشوائي (10%, 20%, 40%) متزامن
         start_time = datetime.now()
-        bot.send_message(message.chat.id, f"🔄 جاري تنفيذ المهمتين المتزامنتين (قبول الدعوة وتغيير الحصة إلى 20%)... (بدأ الساعة: {start_time.strftime('%H:%M:%S')})")
+        # اختيار نسبة عشوائية مختلفة عن السابقة
+        available_quotas = ["10", "20", "40"]
+        last_quota = session['last_quota']
+        if last_quota:
+            available_quotas.remove(last_quota)  # إزالة النسخة السابقة
+        quota_percentage = random.choice(available_quotas)
+        session['last_quota'] = quota_percentage  # تحديث النسخة اللي استخدمت
+        bot.send_message(message.chat.id, f"🔄 جاري تنفيذ المهمتين المتزامنتين (قبول الدعوة وتغيير الحصة إلى {quota_percentage}%)... (بدأ الساعة: {start_time.strftime('%H:%M:%S')})")
         member2_token = get_fresh_token(config['member2_number'], config['member2_password'])
         if member2_token:
-            # إنشاء الخيوط بنفس طريقة الكود القديم
+            # إنشاء الخيوط
             threads = []
             
             # Thread لقبول الدعوة
@@ -541,8 +549,8 @@ def run_flex_cycle(message):
 
             # Thread لتغيير الحصة
             def run_quota():
-                ok, msg = change_quota(current_token, config['owner_number'], config['member1_number'], "20", current_ua, random.choice(SUBDOMAINS), current_proxy)
-                bot.send_message(message.chat.id, f"💼 تغيير الحصة إلى 20%: {'✅' if ok else '❌'} {msg} (انتهى الساعة: {datetime.now().strftime('%H:%M:%S')})")
+                ok, msg = change_quota(current_token, config['owner_number'], config['member1_number'], quota_percentage, current_ua, random.choice(SUBDOMAINS), current_proxy)
+                bot.send_message(message.chat.id, f"💼 تغيير الحصة إلى {quota_percentage}%: {'✅' if ok else '❌'} {msg} (انتهى الساعة: {datetime.now().strftime('%H:%M:%S')})")
                 return ok, msg
 
             t1 = Thread(target=run_accept)
@@ -561,7 +569,7 @@ def run_flex_cycle(message):
             end_time = datetime.now()
             execution_time = (end_time - start_time).total_seconds()
             bot.send_message(message.chat.id, f"✅ المهمتان المتزامنتان اكتملتا! (انتهى الساعة: {end_time.strftime('%H:%M:%S')}, المدة: {execution_time:.2f} ثانية)")
-            summary_msgs.append(f"3️⃣ قبول الدعوة وتغيير الحصة إلى 20%: ✅ (المدة: {execution_time:.2f} ثانية)")
+            summary_msgs.append(f"3️⃣ قبول الدعوة وتغيير الحصة إلى {quota_percentage}%: ✅ (المدة: {execution_time:.2f} ثانية)")
         else:
             end_time = datetime.now()
             bot.send_message(message.chat.id, f"❌ فشل الحصول على توكن العضو الثاني - تخطى المهمة. (انتهى الساعة: {end_time.strftime('%H:%M:%S')})")
