@@ -351,7 +351,7 @@ def handle_start(message):
     reset_user_session(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(types.KeyboardButton("بدء دورة إدارة مجموعة فليكس"), types.KeyboardButton("عرض الإعدادات الحالية"))
-    markup.add(types.KeyboardButton("stop"))
+    markup.add(types.KeyboardButton("stop"), types.KeyboardButton("استئناف"))
     bot.send_message(message.chat.id, f"👋 أهلا بك في بوت إدارة مجموعة فودافون فليكس الذكي!\n\nاختر من اللوحة التالية:", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.text == "عرض الإعدادات الحالية")
@@ -468,6 +468,18 @@ def stop_cycle(message):
     else:
         bot.send_message(message.chat.id, "⚠️ لا توجد دورة جارية لإيقافها.")
 
+@bot.message_handler(func=lambda m: m.text == "استئناف")
+def resume_cycle(message):
+    user_id = message.from_user.id
+    session = get_user_session(message)
+    if not session['running'] and user_id in RUNNING_CYCLES and not RUNNING_CYCLES[user_id]:
+        session['running'] = True
+        RUNNING_CYCLES[user_id] = True
+        bot.send_message(message.chat.id, "▶️ تم استئناف الدورة بنجاح!")
+        run_flex_cycle(message)
+    else:
+        bot.send_message(message.chat.id, "⚠️ الدورة جارية بالفعل أو لم تتوقف من قبل!")
+
 def run_flex_cycle(message):
     user_id = message.from_user.id
     session = get_user_session(message)
@@ -562,9 +574,14 @@ def run_flex_cycle(message):
             for t in threads:
                 t.start()
 
-            # انتظار انتهاء الخيوط
-            for t in threads:
-                t.join()
+            # انتظار انتهاء خيط قبول الدعوة
+            t1.join()
+            # إضافة تأخير ثابت 2 ثانية
+            time.sleep(2)
+            bot.send_message(message.chat.id, "⏳ انتظار 2 ثانية بين قبول الدعوة وتغيير الحصة...")
+            # بدء وانتظار خيط تغيير الحصة
+            t2.start()
+            t2.join()
 
             end_time = datetime.now()
             execution_time = (end_time - start_time).total_seconds()
